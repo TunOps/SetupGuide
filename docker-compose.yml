@@ -1,0 +1,141 @@
+
+version: '3.9'
+services:
+  jenkins:
+    image: jenkins/jenkins:latest
+    container_name: my-jenkins
+    privileged: true
+    user: root
+    ports:
+      - 8099:8080
+      - 50000:50000
+    volumes:
+      - ~/jenkins:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/bin/docker:/usr/local/bin/docker
+
+  nexus:
+    image: sonatype/nexus3
+    privileged: true
+    user: root
+    container_name: nexus
+    ports:
+      - 8098:8081
+    volumes:
+      - ./nexus:/nexus-data
+      
+  
+  sonarqube:
+    image: sonarqube
+    privileged: true
+    container_name: sonar
+    user: root
+    expose:
+      - 8097
+    ports:
+      - 8097:9000
+    environment:
+      - sonar.jdbc.url=jdbc:postgresql://db:5432/sonar
+      - sonar.jdbc.username=sonar
+      - sonar.jdbc.password=sonar
+    volumes:
+      - sonarqube_conf:/opt/sonarqube/conf
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_bundled-plugins:/opt/sonarqube/lib/bundled-plugins
+  db:
+    image: postgres:12
+    privileged: true
+    user: root
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+    volumes:
+      - postgresql:/var/lib/postgresql
+      - postgresql_data:/var/lib/postgresql/data
+
+  postgres:
+    image: postgres
+    volumes:
+      - postgres_data1:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: tunops
+  keycloak:
+    image: jboss/keycloak
+    container_name: keycloack
+    environment:
+      DB_VENDOR: POSTGRES
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: tunops
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: tunops
+      #JDBC_PARAMS: "ssl=true"
+    ports:
+      - 8096:8080
+    depends_on:
+      - postgres
+    volumes:
+      - ./themes:/opt/jboss/keycloak/themes/custome/:rw
+
+
+  openldap-app:
+    hostname: ldap.tunops.org
+    image: tiredofit/openldap
+    container_name: openldap-app
+    ports:
+      - 8095:389
+      - 8094:636
+    volumes:
+      - ./backup:/data/backup
+      - ./data:/var/lib/openldap
+      - ./config:/etc/openldap/slapd.d
+      - ./certs:/certs
+    environment:
+      - HOSTNAME=ldap.tunops.org
+      - LOG_LEVEL=256
+      - DOMAIN=tunops.org
+      - BASE_DN=dc=tunops,dc=org
+      - ADMIN_PASS=admin
+      - CONFIG_PASS=config
+      - DEBUG_MODE=FALSE
+
+      - ENABLE_READONLY_USER=FALSE
+      - READONLY_USER_USER=reader
+      - READONLY_USER_PASS=reader
+
+      - ENABLE_TLS=TRUE
+      - TLS_CRT_FILENAME=cert.pem
+      - TLS_KEY_FILENAME=key.pem
+      - TLS_ENFORCE=FALSE
+      - TLS_CIPHER_SUITE=ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:RSA+AESGCM:RSA+AES:-DHE-DSS:-RSA:!aNULL:!MD5:!DSS:!SHA
+      - TLS_VERIFY_CLIENT=never
+      - SSL_HELPER_PREFIX=ldap
+
+      - ENABLE_REPLICATION=FALSE
+      - REPLICATION_CONFIG_SYNCPROV=binddn="cn=admin,cn=config" bindmethod=simple credentials="admin" searchbase="cn=config" type=refreshAndPersist retry="5 5 60 +" timeout=1
+      - REPLICATION_DB_SYNCPROV=binddn="cn=admin,dc=example,dc=org" bindmethod=simple credentials="admin" searchbase="dc=example,dc=org" type=refreshAndPersist interval=00:00:00:10 retry="5 5 60 +" timeout=1
+      - REPLICATION_HOSTS=ldap://ldap1.example.com ldap://ldap2.example.com ldap://ldap3.example.com
+      - REMOVE_CONFIG_AFTER_SETUP=false
+
+      - ENABLE_BACKUP=TRUE
+      - BACKUP_INTERVAL=0400
+      - BACKUP_RETENTION=10080
+
+      - ENABLE_ZABBIX=TRUE
+      - ZABBIX_HOSTNAME=openldap-app
+
+    restart: always   
+
+
+volumes:
+  sonarqube_conf:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_bundled-plugins:
+  postgresql:
+  postgresql_data:
+  postgres_data1:
